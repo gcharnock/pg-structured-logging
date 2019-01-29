@@ -12,7 +12,7 @@ import Data.Functor.Contravariant
 
 data Event = Event 
     { timestampStart :: UTCTime
-    , parent :: Int64
+    , parent :: Maybe Int64
     , eventType :: T.Text 
     }
 
@@ -20,7 +20,7 @@ insertEvent :: Statement Event Int64
 insertEvent = Statement sqlStmnt encoder decoder True
   where sqlStmnt = "INSERT INTO event(timestamp_start, parent, event_type) VALUES($1, $2, $3)"
         encoder = contramap timestampStart (En.param En.timestamptz) <>
-                  contramap parent (En.param En.int8) <>
+                  contramap parent (En.nullableParam En.int8) <>
                   contramap eventType (En.param En.text)
 
         decoder = De.singleRow (De.column De.int8)

@@ -42,6 +42,9 @@ executable example
                        DeriveGeneric,
                        GeneralizedNewtypeDeriving
   build-depends:       base >=4.10 && <4.12,
+                       evnestlog,
                        text,
-                       bytestring
+                       bytestring,
+                       hasql,
+                       time
 
