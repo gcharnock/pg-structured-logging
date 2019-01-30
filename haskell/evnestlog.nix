@@ -1,5 +1,6 @@
-{ mkDerivation, base, bytestring, hasql, monad-logger, mtl, rainbow
-, stdenv, text, transformers, unliftio, unliftio-core
+{ mkDerivation, async, base, bytestring, contravariant, hasql
+, hasql-pool, monad-logger, mtl, rainbow, stdenv, text, time
+, transformers, unliftio, unliftio-core
 }:
 mkDerivation {
   pname = "evnestlog";
@@ -8,10 +9,12 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base bytestring hasql monad-logger mtl rainbow transformers
-    unliftio unliftio-core
+    async base bytestring contravariant hasql hasql-pool monad-logger
+    mtl rainbow text time transformers unliftio unliftio-core
   ];
-  executableHaskellDepends = [ base bytestring text ];
+  executableHaskellDepends = [
+    async base bytestring hasql hasql-pool text time
+  ];
   license = stdenv.lib.licenses.unfree;
   hydraPlatforms = stdenv.lib.platforms.none;
 }

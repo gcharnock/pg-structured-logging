@@ -16,13 +16,11 @@ data Event = Event
     , eventType :: T.Text 
     }
 
-insertEvent :: Statement Event Int64
-insertEvent = Statement sqlStmnt encoder decoder True
+insertEvent :: Statement Event ()
+insertEvent = Statement sqlStmnt encoder De.unit True
   where sqlStmnt = "INSERT INTO event(timestamp_start, parent, event_type) VALUES($1, $2, $3)"
         encoder = contramap timestampStart (En.param En.timestamptz) <>
                   contramap parent (En.nullableParam En.int8) <>
                   contramap eventType (En.param En.text)
-
-        decoder = De.singleRow (De.column De.int8)
 
 

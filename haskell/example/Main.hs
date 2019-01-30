@@ -1,22 +1,49 @@
 module Main where
 
-import Hasql.Connection
 import Hasql.Session
+import Hasql.Connection
+import qualified Hasql.Pool as Pool
 
+import Control.Monad
+import Control.Monad.IO.Class
 import Data.Time.Clock
 import NestedLogger
+import Control.Concurrent.Async
 
 exampleSession :: Session ()
 exampleSession = do
-  let event = Event { timestampStart = undefined
+  now <- liftIO $ getCurrentTime
+  let event = Event { timestampStart = now 
                     , parent = Nothing
                     , eventType = "ExampleApp"
                     }
-  statement event insertEvent
+  replicateM_ 10000 $ statement event insertEvent
   return ()
+
+runTest :: Int -> IO ()
+runTest size = do
+  let poolSettings = (size, 10.0, settings "docker" 30000 "postgres" "dev" "postgres")
+  pool <- Pool.acquire poolSettings 
+
+  now <- liftIO $ getCurrentTime
+  s <- replicateM size $ async $ Pool.use pool exampleSession 
+  results <- mapM wait s
+  end <- liftIO $ getCurrentTime
+  let deltaT = end `diffUTCTime` now
+
+  putStrLn $ show $ fromIntegral size * 10000.0 / realToFrac deltaT
+
+  forM_ results $ \result -> do
+    case result of
+      Right _ -> return ()
+      Left qe -> print qe
+
+  Pool.release pool
 
 main :: IO ()
 main = do
-    Right connection <- acquire $ settings "docker" 30000 "postgres" "dev" "postgres"
-    run exampleSession connection
-    return ()
+  runTest 1
+  runTest 2
+  runTest 3
+  runTest 4
+  runTest 5

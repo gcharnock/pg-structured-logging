@@ -1,7 +1,7 @@
 CREATE SEQUENCE event_event_id_seq;
 CREATE SEQUENCE message_id_seq;
 
-CREATE TABLE public.event
+CREATE UNLOGGED TABLE public.event
 (
     event_id bigint NOT NULL DEFAULT nextval('event_event_id_seq'::regclass),
     timestamp_start timestamp with time zone NOT NULL,
@@ -16,7 +16,7 @@ WITH (
 );
 
 
-CREATE TABLE public.message
+CREATE UNLOGGED TABLE public.message
 (
     message_id bigint NOT NULL DEFAULT nextval('message_id_seq'::regclass),
     message text COLLATE pg_catalog."default" NOT NULL,
