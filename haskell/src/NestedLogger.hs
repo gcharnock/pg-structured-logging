@@ -11,9 +11,9 @@ import Data.Time.Clock
 import Data.Functor.Contravariant
 
 data Event = Event 
-    { timestampStart :: UTCTime
-    , parent :: Maybe Int64
-    , eventType :: T.Text 
+    { timestampStart :: !UTCTime
+    , parent :: !(Maybe Int64)
+    , eventType :: !T.Text 
     }
 
 insertEvent :: Statement Event ()
