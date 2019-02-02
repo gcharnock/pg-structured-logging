@@ -22,7 +22,7 @@ CREATE UNLOGGED TABLE public.message
     message_id bigint NOT NULL DEFAULT nextval('message_id_seq'::regclass),
     message text COLLATE pg_catalog."default" NOT NULL,
     level text COLLATE pg_catalog."default" NOT NULL,
-    event_id bigint,
+    event_id UUID,
     timestamp timestamp without time zone NOT NULL,
     filename text COLLATE pg_catalog."default",
     line integer,
