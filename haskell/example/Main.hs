@@ -7,44 +7,33 @@ import qualified Hasql.Pool as Pool
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time.Clock
-import NestedLogger
+import Logging.Contextual
 import Control.Concurrent.Async
 import Control.Concurrent.Chan
-import Data.Function
 
-consumer :: Chan (Maybe Event) -> Session () 
-consumer chan = fix $ \continue ->
-  (liftIO $ readChan chan) >>= \case
-    Nothing -> return ()
-    Just event -> statement event insertEvent >> continue
 
-producer :: Int -> Chan (Maybe Event) -> IO NominalDiffTime
-producer size chan = do
+producer :: Logger -> Int -> IO NominalDiffTime
+producer logger size = do
   now <- liftIO $ getCurrentTime
-  let event = Event { timestampStart = now 
-                    , parent = Nothing
-                    , eventType = "ExampleApp"
-                    }
-
-  replicateM_ size $ writeChan chan (Just event)
+  replicateM_ size $ withEvent logger "example event" $ return ()
   end <- liftIO $ getCurrentTime
   return $ end `diffUTCTime` now
 
 runTest :: Int -> IO ()
 runTest size = do
-  chan <- newChan
+  logger <- makeLogger
   let poolSettings = (size, 10.0, settings "docker" 30000 "postgres" "dev" "postgres")
   pool <- Pool.acquire poolSettings 
 
-  producerTask <- async $ producer (size * 10000) chan
+  producerTask <- async $ producer logger (size * 10000)
 
   now <- liftIO $ getCurrentTime
-  consumers <- replicateM size $ async $ Pool.use pool $ consumer chan 
+  consumers <- replicateM size $ async $ Pool.use pool $ consumer logger
 
   producerTime <- wait producerTask
   putStrLn $ show $ fromIntegral size * (10000.0 :: Double) / realToFrac producerTime 
 
-  replicateM_ size $ writeChan chan Nothing
+  replicateM_ size $ writeChan (lgChan logger) Nothing
   mapM_ wait consumers
 
   consumerTime <- getCurrentTime

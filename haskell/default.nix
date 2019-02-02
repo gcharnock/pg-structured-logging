@@ -13,7 +13,7 @@ let
               hspec-core = doJailbreak (self.callPackage ./nix/hspec-core.nix { });
               hspec = super.callPackage ./nix/hspec.nix { };
               unliftio-core = doJailbreak (self.callPackage ./nix/unliftio-core.nix { });
-              contextual-logger = self.callPackage ./nix/contextual-logger.nix {};
+              contextual-logger = self.callPackage ./contextual-logger.nix {};
               contravariant = doJailbreak (self.callPackage ./nix/contravariant.nix {});
               lens-family-core = doJailbreak super.lens-family-core;
               doctest = doJailbreak super.doctest;
@@ -21,7 +21,7 @@ let
           };
           ghc844 = pkgs.haskell.packages.ghc844.override {
             overrides = self: super: {
-              contextual-logger = self.callPackage ./nix/contextual-logger.nix {};
+              contextual-logger = self.callPackage ./contextual-logger.nix {};
             };
           };
         };

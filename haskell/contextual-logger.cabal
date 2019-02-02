@@ -31,7 +31,9 @@ library
                        text,
                        time,
                        contravariant,
-                       async
+                       async,
+                       aeson,
+                       uuid
 
 executable example
   main-is:             Main.hs
@@ -50,5 +52,6 @@ executable example
                        hasql,
                        hasql-pool,
                        time,
-                       async
+                       async,
+                       aeson
 

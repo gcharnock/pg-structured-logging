@@ -3,12 +3,13 @@ CREATE SEQUENCE message_id_seq;
 
 CREATE UNLOGGED TABLE public.event
 (
-    event_id bigint NOT NULL DEFAULT nextval('event_event_id_seq'::regclass),
+    event_id uuid NOT NULL,
     timestamp_start timestamp with time zone NOT NULL,
     timestamp_end timestamp with time zone,
-    parent bigint,
+    parent uuid,
     event_type text COLLATE pg_catalog."default",
     data jsonb,
+    error jsonb,
     CONSTRAINT event_pkey PRIMARY KEY (event_id)
 )
 WITH (
