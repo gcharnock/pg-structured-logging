@@ -1,5 +1,5 @@
 
-module NestedLogger where
+module Logging.Contextual where
 
 import Hasql.Statement
 import Hasql.Session
