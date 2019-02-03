@@ -1,12 +1,17 @@
 
 module Logging.Contextual(
     Logger,
+    LoggerSettings(..),
+    LogMsg(..),
+    LogEvent(..),
     makeLogger,
     withEvent,
-    postLog,
-    closeLogger
+    postRawLog,
+    closeLogger,
+    withLogger
 ) where
 
+import Control.Exception
 import           Hasql.Connection
 import qualified Hasql.Pool                    as Pool
 import           Data.Function
@@ -14,6 +19,7 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Concurrent.Chan
 import           Control.Concurrent.Async
+import qualified Data.ByteString               as BS
 import           Hasql.Statement
 import           Hasql.Session
 import qualified Data.Text                     as T
@@ -25,6 +31,7 @@ import           Data.Functor.Contravariant
 import           Data.Aeson
 import           Data.UUID
 import           Data.UUID.V4
+import           Data.Word
 
 data StartEvent = StartEvent 
     { seEventId :: UUID
@@ -46,6 +53,16 @@ data Message = Message
     , msgEventId :: Maybe UUID
     , msgTimestamp :: UTCTime
     , msgData :: Maybe Value
+    }
+
+data LogMsg = LogMsg
+    { logMsgLevel :: T.Text
+    , logMsgBody :: T.Text
+    , logMsgData :: Maybe Value}
+
+data LogEvent = LogEvent
+    { logEvType :: T.Text
+    , logEvData :: Maybe Value
     }
 
 insertEvent :: Statement StartEvent () 
@@ -72,15 +89,26 @@ insertMessage = Statement sqlStmnt encoder De.unit True
                   contramap msgTimestamp (En.param En.timestamptz) <>
                   contramap msgData (En.nullableParam En.jsonb) 
 
-data LogEvent = LEStart StartEvent | LEEnd FinishEvent | LEMessage Message
+data ChanMsg = LEStart StartEvent | LEEnd FinishEvent | LEMessage Message
 
 data Logger = Logger 
-  { lgChan :: Chan (Maybe LogEvent)
+  { lgChan :: Chan (Maybe ChanMsg)
   , lgWriters :: [Async (Either Pool.UsageError ())]
   , lgPool :: Pool.Pool
+  , lgEventId :: UUID
+  , lgParentId :: Maybe UUID
   }
 
-consumer :: Chan (Maybe LogEvent) -> Session () 
+data LoggerSettings = LoggerSettings
+  { lsWriterCount :: Int
+  , lsHostname :: BS.ByteString
+  , lsPort :: Word16
+  , lsUsername :: BS.ByteString
+  , lsPassword :: BS.ByteString
+  , lsDbName :: BS.ByteString
+  }
+
+consumer :: Chan (Maybe ChanMsg) -> Session () 
 consumer chan = fix $ \continue ->
   (liftIO $ readChan chan) >>= \case
     Nothing -> return ()
@@ -88,17 +116,23 @@ consumer chan = fix $ \continue ->
     Just (LEEnd eventEnd) -> statement eventEnd finishEvent >> continue
     Just (LEMessage msg) -> statement msg insertMessage >> continue
 
-makeLogger :: Int -> IO Logger
-makeLogger writerCount = do
-    let poolSettings = (writerCount, 10.0, settings "docker" 30000 "postgres" "dev" "postgres")
+makeLogger :: LoggerSettings -> LogEvent -> IO Logger
+makeLogger LoggerSettings {lsWriterCount, lsHostname, lsPort, lsUsername, lsPassword, lsDbName} logEvent = do
+    let pgSettings = settings lsHostname lsPort lsUsername lsPassword lsDbName
+    let poolSettings = (lsWriterCount, 10.0, pgSettings)
     pool <- Pool.acquire poolSettings 
     
     lgChan <- newChan
-    consumers <- replicateM writerCount $ async $ Pool.use pool $ consumer lgChan
-    return Logger {lgChan, lgWriters = consumers, lgPool = pool} 
+    consumers <- replicateM lsWriterCount $ async $ Pool.use pool $ consumer lgChan
+    lgEventId <- beginEvent lgChan logEvent
+    return $ Logger {lgChan, lgWriters = consumers, lgPool = pool, lgEventId, lgParentId = Nothing}
+
+withLogger :: LoggerSettings -> LogEvent -> (Logger -> IO a) -> IO a
+withLogger loggerSettings logEvent = bracket (makeLogger loggerSettings logEvent) closeLogger
 
 closeLogger :: Logger -> IO ()
-closeLogger Logger {lgChan, lgWriters, lgPool} = do
+closeLogger Logger {lgChan, lgWriters, lgPool, lgEventId} = do
+  endEvent lgChan lgEventId
   replicateM_ (length lgWriters) $ writeChan lgChan Nothing
   results <- mapM wait lgWriters :: IO [Either Pool.UsageError ()]
 
@@ -112,35 +146,40 @@ closeLogger Logger {lgChan, lgWriters, lgPool} = do
 
   Pool.release lgPool
 
-withEvent :: Logger -> T.Text -> Maybe Value -> IO a -> IO a
-withEvent Logger {lgChan} eventType seData action = do
-  eventId <- nextRandom
-  now <- getCurrentTime
-  let event = StartEvent
-                { seEventId = eventId
-                , seTimestampStart = now 
-                , seParent = Nothing
-                , seEventType = eventType
-                , seData
-                }
+beginEvent :: Chan (Maybe ChanMsg) -> LogEvent -> IO UUID
+beginEvent chan LogEvent {logEvType, logEvData} = do
+            eventId <- nextRandom
+            now <- getCurrentTime
+            let event = StartEvent
+                          { seEventId = eventId
+                          , seTimestampStart = now 
+                          , seParent = Nothing
+                          , seEventType = logEvType
+                          , seData = logEvData
+                          }
+            writeChan chan $ Just $ LEStart event
+            return eventId
 
-  writeChan lgChan $ Just $ LEStart event
-  result <- action
-  end <- getCurrentTime
-  writeChan lgChan $ Just $ LEEnd FinishEvent 
-               { feEventId = eventId
-               , feTimestampEnd = end
-               , feError = Nothing
-               }
-  return result 
+endEvent :: Chan (Maybe ChanMsg) -> UUID -> IO ()
+endEvent chan feEventId = do
+            endTime <- getCurrentTime
+            writeChan chan $ Just $ LEEnd FinishEvent 
+                         { feEventId 
+                         , feTimestampEnd = endTime
+                         , feError = Nothing
+                         }
+withEvent :: Logger -> LogEvent -> (Logger -> IO a) -> IO a
+withEvent logger@Logger {lgChan} logEvent action = 
+    bracket (beginEvent lgChan logEvent) (endEvent lgChan) $ \lgEventId ->
+        action $ logger {lgEventId}
 
-postLog :: Logger -> T.Text -> T.Text -> Maybe Value -> IO ()
-postLog Logger {lgChan} level message msgData = do
+postRawLog :: Logger -> LogMsg -> IO ()
+postRawLog Logger {lgChan, lgEventId} LogMsg {logMsgLevel, logMsgBody, logMsgData} = do
     now <- getCurrentTime
     writeChan lgChan $ Just $ LEMessage Message
-       { msgBody = message
-       , msgLevel = level
+       { msgBody = logMsgBody 
+       , msgLevel = logMsgLevel
        , msgTimestamp = now
-       , msgData
-       , msgEventId = Nothing
+       , msgData = logMsgData
+       , msgEventId = Just lgEventId
        } 

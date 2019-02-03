@@ -10,15 +10,23 @@ import Logging.Contextual
 producer :: Logger -> Int -> IO NominalDiffTime
 producer logger msgCount = do
   now <- liftIO $ getCurrentTime
-  withEvent logger "example event" Nothing $
-    replicateM_ msgCount $ postLog logger "TRACE" "example message" Nothing 
+  withEvent logger (LogEvent "example event" Nothing) $ \logger ->
+    replicateM_ msgCount $ postRawLog logger (LogMsg "TRACE" "example message" Nothing)
   end <- liftIO $ getCurrentTime
   return $ end `diffUTCTime` now
 
 runTest :: Int -> IO ()
 runTest size = do
-  logger <- makeLogger size
+  let logSettings = LoggerSettings 
+         { lsWriterCount = size
+         , lsHostname = "docker"
+         , lsPort = 30000
+         , lsUsername = "postgres"
+         , lsPassword = "dev"
+         , lsDbName = "postgres"
+         }
 
+  logger <- makeLogger logSettings (LogEvent "app startup" Nothing)
   now <- liftIO $ getCurrentTime
   producerTime <- producer logger (size * 10000)
   print $ fromIntegral size * (10000.0 :: Double) / realToFrac producerTime 
