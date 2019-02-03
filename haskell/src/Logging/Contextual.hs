@@ -1,4 +1,4 @@
-
+{-# LANGUAGE DeriveLift #-}
 module Logging.Contextual(
     Logger,
     LoggerSettings(..),
@@ -32,6 +32,11 @@ import           Data.Aeson
 import           Data.UUID
 import           Data.UUID.V4
 import           Data.Word
+import Language.Haskell.TH.Syntax
+
+instance Lift UUID
+instance Lift UTCTime
+instance Lift T.Text
 
 data StartEvent = StartEvent 
     { seEventId :: UUID
@@ -39,13 +44,13 @@ data StartEvent = StartEvent
     , seParent :: Maybe UUID
     , seEventType :: T.Text 
     , seData :: Maybe Value
-    }
+    } deriving Lift
 
 data FinishEvent = FinishEvent
     { feEventId :: UUID
     , feTimestampEnd :: UTCTime
     , feError :: Maybe Value
-    }
+    } deriving Lift
 
 data Message = Message
     { msgBody :: T.Text
@@ -53,17 +58,18 @@ data Message = Message
     , msgEventId :: Maybe UUID
     , msgTimestamp :: UTCTime
     , msgData :: Maybe Value
-    }
+    } deriving Lift
 
 data LogMsg = LogMsg
     { logMsgLevel :: T.Text
     , logMsgBody :: T.Text
-    , logMsgData :: Maybe Value}
+    , logMsgData :: Maybe Value
+    } deriving Lift
 
 data LogEvent = LogEvent
     { logEvType :: T.Text
     , logEvData :: Maybe Value
-    }
+    } deriving Lift
 
 insertEvent :: Statement StartEvent () 
 insertEvent = Statement sqlStmnt encoder De.unit True
@@ -90,6 +96,7 @@ insertMessage = Statement sqlStmnt encoder De.unit True
                   contramap msgData (En.nullableParam En.jsonb) 
 
 data ChanMsg = LEStart StartEvent | LEEnd FinishEvent | LEMessage Message
+  deriving Lift
 
 data Logger = Logger 
   { lgChan :: Chan (Maybe ChanMsg)
@@ -97,7 +104,7 @@ data Logger = Logger
   , lgPool :: Pool.Pool
   , lgEventId :: UUID
   , lgParentId :: Maybe UUID
-  }
+  } 
 
 data LoggerSettings = LoggerSettings
   { lsWriterCount :: Int

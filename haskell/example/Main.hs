@@ -5,6 +5,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time.Clock
 import Logging.Contextual
+import Logging.Contextual.BasicScheme
 
 
 producer :: Logger -> Int -> IO NominalDiffTime
@@ -27,6 +28,8 @@ runTest size = do
          }
 
   logger <- makeLogger logSettings (LogEvent "app startup" Nothing)
+  $(headline) logger "Logger created"
+  -- (\x y -> return () >> return ()) 1 2
   now <- liftIO $ getCurrentTime
   producerTime <- producer logger (size * 10000)
   print $ fromIntegral size * (10000.0 :: Double) / realToFrac producerTime 

@@ -9,7 +9,8 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Logging.Contextual
+  exposed-modules:     Logging.Contextual,
+                       Logging.Contextual.BasicScheme
   hs-source-dirs:      src
   ghc-options:         -Wall -O2
   default-language:    Haskell2010
@@ -17,7 +18,9 @@ library
                        LambdaCase,
                        NamedFieldPuns,
                        DeriveGeneric,
-                       GeneralizedNewtypeDeriving
+                       GeneralizedNewtypeDeriving,
+                       TemplateHaskell,
+                       QuasiQuotes
   build-depends:       base >=4.10 && <4.12,
                        bytestring,
                        transformers,
@@ -33,7 +36,8 @@ library
                        contravariant,
                        async,
                        aeson,
-                       uuid
+                       uuid,
+                       template-haskell
 
 executable example
   main-is:             Main.hs
