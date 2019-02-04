@@ -8,27 +8,31 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
 headlineRaw :: Logger -> T.Text -> IO ()
-headlineRaw logger msg = postRawLog logger $ LogMsg "HEADLINE" msg Nothing
+headlineRaw logger msg = postRawLog logger $ LogMsg "HEADLINE" msg Nothing Nothing
 
 headline :: Q Exp
 headline = do
    loc <- location
-   let locStr = show loc
-   let printExp = [|putStrLn $(lift locStr)|]
-   [|\logger msg -> $(printExp) >> headlineRaw logger msg|]
+   let locExp = [|Loc $(lift $ loc_filename loc)
+                   $(lift $ loc_package loc)
+                   $(lift $ loc_module loc)
+                   $(lift $ loc_start loc)
+                   $(lift $ loc_end loc)
+             |]
+   [|\logger msg -> postRawLog logger $ LogMsg "HEADLINE" msg Nothing (Just $(locExp))|]
 
 error :: Logger -> T.Text -> IO ()
-error logger msg = postRawLog logger $ LogMsg "ERROR" msg Nothing
+error logger msg = postRawLog logger $ LogMsg "ERROR" msg Nothing Nothing
 
 warning :: Logger -> T.Text -> IO ()
-warning logger msg = postRawLog logger $ LogMsg "WARN" msg Nothing
+warning logger msg = postRawLog logger $ LogMsg "WARN" msg Nothing Nothing
 
 info :: Logger -> T.Text -> IO ()
-info logger msg = postRawLog logger $ LogMsg "INFO" msg Nothing
+info logger msg = postRawLog logger $ LogMsg "INFO" msg Nothing Nothing
 
 trace :: Logger -> T.Text -> IO ()
-trace logger msg = postRawLog logger $ LogMsg "TRACE" msg Nothing
+trace logger msg = postRawLog logger $ LogMsg "TRACE" msg Nothing Nothing
 
 debug :: Logger -> T.Text -> IO ()
-debug logger msg = postRawLog logger $ LogMsg "DEBUG" msg Nothing
+debug logger msg = postRawLog logger $ LogMsg "DEBUG" msg Nothing Nothing
 

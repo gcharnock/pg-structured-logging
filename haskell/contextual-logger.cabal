@@ -49,6 +49,8 @@ executable example
                        NamedFieldPuns,
                        DeriveGeneric,
                        GeneralizedNewtypeDeriving
+                       TemplateHaskell,
+                       QuasiQuotes
   build-depends:       base >=4.10 && <4.12,
                        contextual-logger,
                        text,

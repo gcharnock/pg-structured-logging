@@ -12,7 +12,7 @@ producer :: Logger -> Int -> IO NominalDiffTime
 producer logger msgCount = do
   now <- liftIO $ getCurrentTime
   withEvent logger (LogEvent "example event" Nothing) $ \logger ->
-    replicateM_ msgCount $ postRawLog logger (LogMsg "TRACE" "example message" Nothing)
+    replicateM_ msgCount $ postRawLog logger (LogMsg "TRACE" "example message" Nothing Nothing)
   end <- liftIO $ getCurrentTime
   return $ end `diffUTCTime` now
 
@@ -28,9 +28,8 @@ runTest size = do
          }
 
   logger <- makeLogger logSettings (LogEvent "app startup" Nothing)
-  $(headline) logger "Logger created"
-  -- (\x y -> return () >> return ()) 1 2
-  now <- liftIO $ getCurrentTime
+  $headline logger "Logger created"
+  now <- liftIO getCurrentTime
   producerTime <- producer logger (size * 10000)
   print $ fromIntegral size * (10000.0 :: Double) / realToFrac producerTime 
 
