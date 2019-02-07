@@ -1,5 +1,13 @@
 
-module Logging.Contextual.BasicScheme where
+module Logging.Contextual.BasicScheme(
+   headline,
+   error,
+   warning,
+   info,
+   trace
+) where
+
+import Prelude hiding (error)
 
 import Logging.Contextual
 import Data.Text as T
@@ -7,32 +15,32 @@ import Data.Aeson
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
-headlineRaw :: Logger -> T.Text -> IO ()
-headlineRaw logger msg = postRawLog logger $ LogMsg "HEADLINE" msg Nothing Nothing
+mkLevel :: T.Text -> Q Exp
+mkLevel level = do
+   loc <- location
+   let filename = loc_filename loc
+       (line, col) = loc_start loc
+   [|\logger msg ->
+      postRawLog logger LogMsg 
+         { logMsgLevel= $(lift $ T.unpack level)
+         , logMsgBody=msg
+         , logMsgData=Nothing 
+         , logMsgFilename=Just filename
+         , logMsgLine=Just line
+         , logMsgCol=Just col
+         }|]
 
 headline :: Q Exp
-headline = do
-   loc <- location
-   let locExp = [|Loc $(lift $ loc_filename loc)
-                   $(lift $ loc_package loc)
-                   $(lift $ loc_module loc)
-                   $(lift $ loc_start loc)
-                   $(lift $ loc_end loc)
-             |]
-   [|\logger msg -> postRawLog logger $ LogMsg "HEADLINE" msg Nothing (Just $(locExp))|]
+headline = mkLevel "HEADLINE"
 
-error :: Logger -> T.Text -> IO ()
-error logger msg = postRawLog logger $ LogMsg "ERROR" msg Nothing Nothing
+error :: Q Exp
+error = mkLevel "ERROR"
 
-warning :: Logger -> T.Text -> IO ()
-warning logger msg = postRawLog logger $ LogMsg "WARN" msg Nothing Nothing
+warning :: Q Exp
+warning = mkLevel "WARNING"
 
-info :: Logger -> T.Text -> IO ()
-info logger msg = postRawLog logger $ LogMsg "INFO" msg Nothing Nothing
+info :: Q Exp
+info = mkLevel "INFO"
 
-trace :: Logger -> T.Text -> IO ()
-trace logger msg = postRawLog logger $ LogMsg "TRACE" msg Nothing Nothing
-
-debug :: Logger -> T.Text -> IO ()
-debug logger msg = postRawLog logger $ LogMsg "DEBUG" msg Nothing Nothing
-
+trace :: Q Exp
+trace = mkLevel "TRACE"

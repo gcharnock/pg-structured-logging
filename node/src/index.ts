@@ -2,13 +2,13 @@ const asyncHooks = require('async_hooks');
 const fs = require("fs");
 
 
-const asyncHook = asyncHooks.createHook({init, before, after, destory, promiseResolve});
+const asyncHook = asyncHooks.createHook({init, after});
 asyncHook.enable();
 
-const contexts = new Map();
+const contexts = new Map<number, any>();
 contexts.set(asyncHooks.executionAsyncId(), "context 1");
 
-function forkContext(context, makePromise) {
+function forkContext(context: any, makePromise: () => Promise<any>) {
   fs.writeSync(1, `forkContext called\n`);
   return new Promise((resolve, reject) => {
     const eid = asyncHooks.executionAsyncId();
@@ -23,27 +23,23 @@ function getContext() {
   return contexts.get(eid);
 }
 
-function init(asyncId, type, triggerAsyncId, resource) {
+function init(asyncId: number, type: string, triggerAsyncId: number) {
   fs.writeSync(1, `init ${type}(${asyncId}): trigger: ${triggerAsyncId}\n`);
   contexts.set(asyncId, contexts.get(triggerAsyncId));
 }
 
-function before(asyncId) {
-  fs.writeSync(1, `before ${asyncId}\n`);
-}
-
-function after(asyncId) {
+function after(asyncId: number) {
   fs.writeSync(1, `after ${asyncId}\n`);
   contexts.delete(asyncId);
 }
 
-function destory(asyncId) {
-  fs.writeSync(1, `destory ${asyncId}\n`);
+//============================================================
+
+export class Logger {
+
 }
 
-function promiseResolve(asyncId) {
-  fs.writeSync(1, `promiseResolve ${asyncId}\n`)
-}
+//============================================================
 
 async function two() {
   fs.writeSync(1, `two() Context=${getContext()}\n`)

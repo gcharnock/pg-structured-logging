@@ -31,7 +31,6 @@ import           Data.Aeson
 import           Data.UUID
 import           Data.UUID.V4
 import           Data.Word
-import Language.Haskell.TH.Syntax
 
 data StartEvent = StartEvent 
     { seEventId :: UUID
@@ -47,21 +46,21 @@ data FinishEvent = FinishEvent
     , feError :: Maybe Value
     } 
 
-data Message = Message
-    { msgBody :: T.Text
-    , msgLevel :: T.Text
-    , msgEventId :: Maybe UUID
-    , msgTimestamp :: UTCTime
-    , msgData :: Maybe Value
-    , msgLoc :: Maybe Loc
-    } 
-
 data LogMsg = LogMsg
     { logMsgLevel :: T.Text
     , logMsgBody :: T.Text
     , logMsgData :: Maybe Value
-    , logMsgLoc :: Maybe Loc
+    , logMsgFilename :: Maybe T.Text
+    , logMsgLine :: Maybe Int
+    , logMsgCol :: Maybe Int
     } 
+
+data Message = Message
+    { msgEventId :: Maybe UUID
+    , msgTimestamp :: UTCTime
+    , msgData :: LogMsg 
+    } 
+
 
 data LogEvent = LogEvent
     { logEvType :: T.Text
@@ -85,12 +84,15 @@ finishEvent = Statement sqlStmnt encoder De.unit True
 
 insertMessage :: Statement Message ()
 insertMessage = Statement sqlStmnt encoder De.unit True
-  where sqlStmnt = "INSERT INTO message(message, level, event_id, timestamp, data) VALUES($1, $2, $3, $4, $5)"
-        encoder = contramap msgBody (En.param En.text) <>
-                  contramap msgLevel (En.param En.text) <>
+  where sqlStmnt = "INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col) VALUES($1, $2, $3, $4, $5, $6, $7, $8)"
+        encoder = contramap (logMsgBody.msgData) (En.param En.text) <>
+                  contramap (logMsgLevel.msgData) (En.param En.text) <>
                   contramap msgEventId (En.nullableParam  En.uuid) <>
                   contramap msgTimestamp (En.param En.timestamptz) <>
-                  contramap msgData (En.nullableParam En.jsonb) 
+                  contramap (logMsgData.msgData) (En.nullableParam En.jsonb) <>
+                  contramap (logMsgFilename.msgData) (En.nullableParam En.text) <>
+                  contramap (fmap fromIntegral.logMsgLine.msgData) (En.nullableParam En.int4) <>
+                  contramap (fmap fromIntegral.logMsgCol.msgData) (En.nullableParam En.int4) 
 
 data ChanMsg = LEStart StartEvent | LEEnd FinishEvent | LEMessage Message
 
@@ -177,12 +179,10 @@ withEvent logger@Logger {lgChan} logEvent action =
         action $ logger {lgEventId}
 
 postRawLog :: Logger -> LogMsg -> IO ()
-postRawLog Logger {lgChan, lgEventId} LogMsg {logMsgLevel, logMsgBody, logMsgData} = do
+postRawLog Logger {lgChan, lgEventId} logMsg@LogMsg {logMsgLevel, logMsgBody, logMsgData} = do
     now <- getCurrentTime
     writeChan lgChan $ Just $ LEMessage Message
-       { msgBody = logMsgBody 
-       , msgLevel = logMsgLevel
+       { msgData = logMsg 
        , msgTimestamp = now
-       , msgData = logMsgData
        , msgEventId = Just lgEventId
        } 
