@@ -1,0 +1,25 @@
+{
+  "name": "contextual-logger",
+  "version": "0.0.1",
+  "description": "log things with nested contexts.",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Gareth Charnock",
+  "license": "BSD-2-Clause",
+  "devDependencies": {
+    "@types/source-map-support": "^0.4.1",
+    "@types/node": "^10.12.21",
+    "@types/pg": "^7.4.11",
+    "@types/uuid": "^3.4.4",
+    "node-ts": "^2.1.2",
+    "pg": "^7.8.0",
+    "ts-node": "^8.0.2",
+    "typescript": "^3.3.1"
+  },
+  "dependencies": {
+    "source-map-support": "^0.5.10",
+    "uuid": "^3.3.2"
+  }
+}

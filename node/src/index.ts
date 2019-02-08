@@ -1,67 +1,230 @@
+import {AsyncHook} from "async_hooks";
+import uuid = require("uuid");
+import * as util from "util";
+import {Pool} from "pg";
+import {wrapCallSite} from "source-map-support";
+
 const asyncHooks = require('async_hooks');
-const fs = require("fs");
+type EventId = string & { __brand: EventId };
 
+export type PostgresConfig = {
+    host: string,
+    port: number,
+    username: string,
+    password: string,
+    database: string,
 
-const asyncHook = asyncHooks.createHook({init, after});
-asyncHook.enable();
+    poolSize: number,
+    idleTimeoutMillis: number,
+    connectionTimeoutMillis: number,
+    connectionName: string
+};
 
-const contexts = new Map<number, any>();
-contexts.set(asyncHooks.executionAsyncId(), "context 1");
-
-function forkContext(context: any, makePromise: () => Promise<any>) {
-  fs.writeSync(1, `forkContext called\n`);
-  return new Promise((resolve, reject) => {
-    const eid = asyncHooks.executionAsyncId();
-    fs.writeSync(1, `setting context[${eid}] from ${contexts.get(eid)} to ${context}\n`);
-    contexts.set(eid, context);
-    makePromise().then(resolve).catch(reject);
-  });
+export type RawMessage = {
+    tag: "RawMessage",
+    message: string,
+    level: string,
+    eventId: EventId | undefined,
+    timestamp: Date,
+    data: any,
+    filename: string,
+    line: number,
+    col: number
 }
 
-function getContext() {
-  const eid = asyncHooks.executionAsyncId();
-  return contexts.get(eid);
+export type RawEventStart = {
+    tag: "RawEventStart",
+    eventId: EventId,
+    timestampStart: Date,
+    parent: EventId,
+    eventType: string,
+    data: any
 }
 
-function init(asyncId: number, type: string, triggerAsyncId: number) {
-  fs.writeSync(1, `init ${type}(${asyncId}): trigger: ${triggerAsyncId}\n`);
-  contexts.set(asyncId, contexts.get(triggerAsyncId));
+export type RawEventEnd = {
+    tag: "RawEventEnd",
+    eventId: EventId,
+    timestampEnd: Date,
+    error: any,
+    result: any
 }
 
-function after(asyncId: number) {
-  fs.writeSync(1, `after ${asyncId}\n`);
-  contexts.delete(asyncId);
+//============================================================
+
+function sleep(deplay: number): Promise<void> {
+    return new Promise(resolve => {
+        setTimeout(resolve, deplay);
+    });
 }
 
 //============================================================
 
 export class Logger {
+    private contexts = new Map<number, EventId>();
+    private asyncHook: AsyncHook;
+    private pgConfig: PostgresConfig;
+    private pgPool: Pool = undefined as unknown as Pool;
+    private msgQueue: (RawMessage | RawEventStart | RawEventEnd)[] = [];
+
+    constructor(pgConfig: PostgresConfig) {
+        this.pgConfig = pgConfig;
+        this.asyncHook = asyncHooks.createHook({
+            init: this.initAsync.bind(this),
+            after: this.afterAsync.bind(this)
+        });
+        this.asyncHook.enable();
+    }
+
+    async init() {
+        let i = 0;
+        while (true) {
+            try {
+                this.pgPool = new Pool({
+                    ...this.pgConfig,
+                    user: this.pgConfig.username,
+                    max: this.pgConfig.poolSize,
+                    application_name: this.pgConfig.connectionName,
+                    idleTimeoutMillis: this.pgConfig.idleTimeoutMillis,
+                    connectionTimeoutMillis: this.pgConfig.connectionTimeoutMillis
+                });
+                return;
+            } catch (e) {
+                if (i < 10) {
+                    i++;
+                    await sleep(2000);
+                } else {
+                    process.exit(1);
+                }
+            }
+        }
+    }
+
+    newEventId(): EventId {
+        const contextId = uuid.v4().toString() as EventId;
+        const eid = asyncHooks.executionAsyncId();
+        this.contexts.set(eid, contextId);
+        return contextId;
+    }
+
+    getEventId(): EventId | undefined {
+        const eid = asyncHooks.executionAsyncId();
+        return this.contexts.get(eid);
+    }
+
+    private setEventId(eventId: EventId | undefined) {
+        const eid = asyncHooks.executionAsyncId();
+        if(eventId) {
+            return this.contexts.set(eid, eventId);
+        } else {
+            this.contexts.delete(eid);
+        }
+    }
+
+    info(item: any, ...logItems: any[]) {
+        const message = util.format(item, ...logItems);
+        this.rawLog(message, "INFO", undefined);
+    }
+
+    withEvent<T>(eventType: string, wrapped: () => {returnValue: T, result?: any}): T {
+        const oldId = this.getEventId();
+        this.newEventId();
+        try {
+            const result = wrapped();
+            this.setEventId(oldId);
+            return result.returnValue;
+        } catch (e) {
+            this.setEventId(oldId);
+            throw e;
+        }
+    }
+
+    rawLog(message: string, level: string, data: any) {
+
+        let holder: { stack: NodeJS.CallSite[] } = {} as any;
+        const old = Error.prepareStackTrace;
+        Error.prepareStackTrace = (_, s) => s;
+        Error.captureStackTrace(holder);
+        const stack = holder.stack.map(wrapCallSite);
+        Error.prepareStackTrace = old;
+        const prunedStack = stack.slice(2);
+
+        const rawMessage: RawMessage = {
+            tag: "RawMessage",
+            eventId: this.getEventId(),
+            message,
+            level,
+            timestamp: new Date(),
+            filename: prunedStack[0].getFileName(),
+            line: prunedStack[0].getLineNumber(),
+            col: prunedStack[0].getColumnNumber(),
+            data
+        };
+
+        this.msgQueue.push(rawMessage);
+        this.doInserts().catch(console.error);
+    }
+
+    private async doInserts() {
+        const queue = this.msgQueue;
+        this.msgQueue = [];
+
+        for(const msg of queue) {
+            if(msg.tag === "RawMessage") {
+                await this.insertMessage(msg);
+            } else {
+                throw new Error("Not implemented");
+            }
+        }
+    }
+
+    private async insertMessage(msg: RawMessage) {
+        const query = "INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col) VALUES($1, $2, $3, $4, $5, $6, $7, $8)";
+        await this.pgPool.query(query, [
+            msg.message,
+            msg.level,
+            msg.eventId,
+            msg.timestamp,
+            msg.data,
+            msg.filename,
+            msg.line,
+            msg.col
+        ]);
+    }
+
+    private async endEvent(eventEnd: RawEventEnd) {
+        const query = "UPDATE event SET timestamp_end=$1, error=$2, result=$3 WHERE event_id=$4";
+        await this.pgPool.query(query, [
+            eventEnd.timestampEnd,
+            eventEnd.error,
+            eventEnd.result,
+            eventEnd.eventId
+        ])
+    }
+
+    private async insertEvent(event: RawEventStart) {
+        const query = "INSERT INTO event(event_id, timestamp_start, parent, event_type, data) VALUES($1, $2, $3, $4, $5)";
+        await this.pgPool.query(query, [
+            event.eventId,
+            event.timestampStart,
+            event.parent,
+            event.eventType,
+            event.data
+        ])
+    }
+
+    private initAsync(asyncId: number, type: string, triggerAsyncId: number) {
+        const parentContext = this.contexts.get(triggerAsyncId);
+        if (parentContext) {
+            this.contexts.set(asyncId, parentContext);
+        }
+    }
+
+    private afterAsync(asyncId: number) {
+        this.contexts.delete(asyncId);
+    }
 
 }
 
 //============================================================
 
-async function two() {
-  fs.writeSync(1, `two() Context=${getContext()}\n`)
-}
 
-async function one() {
-  fs.writeSync(1, `one()-- before two(). Context=${getContext()}\n`)
-  await two();
-  fs.writeSync(1, `one()-- after two(). Context=${getContext()}\n`)
-}
-
-(async () => {
-  fs.writeSync(1, `Running async. Context=${getContext()}\n`);
-
-  setTimeout(() => {
-    fs.writeSync(1, `Running timer. Context=${getContext()}\n`);
-    forkContext("context 2", async() => {
-      one().then(
-        ()=> fs.writeSync(1, `one() returned. Context=${getContext()}\n`)
-      ).catch();
-    });
-  }, 1)
-
-  fs.writeSync(1, `Done running async. Context=${getContext()}\n`);
-})();
