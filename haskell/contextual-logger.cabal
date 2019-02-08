@@ -37,7 +37,9 @@ library
                        async,
                        aeson,
                        uuid,
-                       template-haskell
+                       template-haskell,
+                       neat-interpolation,
+                       interpolatedstring-perl6
 
 executable example
   main-is:             Main.hs
@@ -59,5 +61,7 @@ executable example
                        hasql-pool,
                        time,
                        async,
-                       aeson
+                       neat-interpolation,
+                       aeson,
+                       interpolatedstring-perl6
 

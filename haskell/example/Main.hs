@@ -1,12 +1,12 @@
 module Main where
 
-
+import qualified Data.Text as T
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time.Clock
 import Logging.Contextual
 import Logging.Contextual.BasicScheme
-
+import NeatInterpolation
 
 producer :: Logger -> Int -> IO NominalDiffTime
 producer logger msgCount = do
@@ -28,7 +28,10 @@ runTest size = do
          }
 
   logger <- makeLogger logSettings (LogEvent "app startup" Nothing)
-  $headline logger "Logger created"
+  let t = "world" :: T.Text
+  let s = [text|hello ${t}|]
+  $headline logger s
+  [headlineQ|logger created. Hostname = {t <> "foobar"}|] logger
   now <- liftIO getCurrentTime
   producerTime <- producer logger (size * 10000)
   print $ fromIntegral size * (10000.0 :: Double) / realToFrac producerTime 

@@ -1,6 +1,7 @@
-{ mkDerivation, async, base, bytestring, contravariant, hasql
-, hasql-pool, monad-logger, mtl, rainbow, stdenv, text, time
-, transformers, unliftio, unliftio-core
+{ mkDerivation, aeson, async, base, bytestring, contravariant
+, hasql, hasql-pool, interpolatedstring-perl6, monad-logger, mtl
+, neat-interpolation, rainbow, stdenv, template-haskell, text, time
+, transformers, unliftio, unliftio-core, uuid
 }:
 mkDerivation {
   pname = "contextual-logger";
@@ -9,11 +10,14 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    async base bytestring contravariant hasql hasql-pool monad-logger
-    mtl rainbow text time transformers unliftio unliftio-core
+    aeson async base bytestring contravariant hasql hasql-pool
+    interpolatedstring-perl6 monad-logger mtl neat-interpolation
+    rainbow template-haskell text time transformers unliftio
+    unliftio-core uuid
   ];
   executableHaskellDepends = [
-    async base bytestring hasql hasql-pool text time
+    aeson async base bytestring hasql hasql-pool
+    interpolatedstring-perl6 neat-interpolation text time
   ];
   license = stdenv.lib.licenses.unfree;
   hydraPlatforms = stdenv.lib.platforms.none;
