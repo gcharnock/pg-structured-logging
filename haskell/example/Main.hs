@@ -4,10 +4,11 @@ import qualified Data.Text as T
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time.Clock
-import Logging.Contextual
-import Logging.Contextual.BasicScheme
-import NeatInterpolation
 import Control.Monad.Trans.Reader(runReaderT, ReaderT, ask)
+
+
+import Logging.Contextual
+import Logging.Contextual.BasicScheme 
 
 producer :: Int -> ReaderT Logger IO NominalDiffTime
 producer msgCount = do
@@ -15,7 +16,7 @@ producer msgCount = do
   now <- liftIO $ getCurrentTime
   withEventM (LogEvent "example event" Nothing) $ do
     logger' <- ask
-    replicateM_ msgCount $ $trace logger' "example message"
+    replicateM_ msgCount $ [logTrace|example message|]
   end <- liftIO $ getCurrentTime
   return $ end `diffUTCTime` now
 
@@ -32,20 +33,24 @@ runTest size = do
 
   logger <- makeLogger logSettings (LogEvent "app startup" Nothing)
   flip runReaderT logger $ do
-    let t = "world" :: T.Text
-    let s = [text|hello ${t}|]
-    $headline logger s
-    [headlineQ|logger created. Hostname = {t <> "foobar"}|] 
+   
+    [logHeadline|log headline|] 
+    [logError|log error|] 
+    [logWarning|log warning|] 
+    [logInfo|log info|] 
+    [logTrace|log trace|] 
+    
+    
     now <- liftIO getCurrentTime
     
     producerTime <- producer (size * 10000)
 
     let bustRate = fromIntegral size * (10000.0 :: Double) / realToFrac producerTime
-    [headlineQ|burst rate={bustRate} lines/sec|]
+    [logHeadline|burst rate={bustRate} lines/sec|]
 
     consumerTime <- liftIO $ getCurrentTime
     let dbRate = fromIntegral size * (10000.0 :: Double) / realToFrac (consumerTime `diffUTCTime` now) 
-    [headlineQ|db rate={dbRate} lines/sec|]
+    [logHeadline|db rate={dbRate} lines/sec|]
 
   closeLogger logger
 

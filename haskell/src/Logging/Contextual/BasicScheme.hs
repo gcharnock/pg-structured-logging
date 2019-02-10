@@ -1,70 +1,56 @@
-
+{-# LANGUAGE MultiWayIf #-}
 module Logging.Contextual.BasicScheme(
-   headline,
-   headlineQ,
-   error,
-   warning,
-   info,
-   trace
+   logHeadline,
+   logError,
+   logWarning,
+   logInfo,
+   logTrace
 ) where
 
 import Prelude hiding (error)
 
+import Rainbow
 import Logging.Contextual
 import Data.Text as T
 import Data.Aeson
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
-import Control.Monad.IO.Class
 import Text.InterpolatedString.Perl6
 
-mkLevel :: T.Text -> Q Exp
-mkLevel level = do
-   loc <- location
-   let filename = loc_filename loc
-       (line, col) = loc_start loc
-   [|\logger msg ->
-      liftIO $ postRawLog logger LogMsg 
-         { logMsgLevel= $(lift $ T.unpack level)
-         , logMsgBody=msg
-         , logMsgData=Nothing 
-         , logMsgFilename=Just filename
-         , logMsgLine=Just line
-         , logMsgCol=Just col
-         }|]
-
-mkLevelQ :: T.Text -> QuasiQuoter
-mkLevelQ level = QuasiQuoter { quoteExp = quoter }
+mkLevel :: T.Text -> QuasiQuoter
+mkLevel level = QuasiQuoter { quoteExp = quoter }
    where textExpQ = quoteExp qq
          quoter str = do
             let msgExp = textExpQ str
             loc <- location
             let filename = loc_filename loc
                 (line, col) = loc_start loc
-            [|postRawLogM LogMsg 
-                  { logMsgLevel= $(lift $ T.unpack level)
-                  , logMsgBody= $(msgExp)
-                  , logMsgData=Nothing 
-                  , logMsgFilename=Just filename
-                  , logMsgLine=Just line
-                  , logMsgCol=Just col
-                  }|]
+            let postExp = [|postRawLogM LogMsg 
+                                { logMsgLevel= $(lift $ T.unpack level)
+                                , logMsgBody= $(msgExp)
+                                , logMsgData=Nothing 
+                                , logMsgFilename=Just filename
+                                , logMsgLine=Just line
+                                , logMsgCol=Just col
+                                }|]
+            if | level == "HEADLINE" -> [|(liftIO $ putChunkLn $ (chunk :: T.Text -> Chunk T.Text) $(msgExp) & fore blue) >> $(postExp) |]
+               | level == "ERROR" ->    [|(liftIO $ putChunkLn $ (chunk :: T.Text -> Chunk T.Text) $(msgExp) & fore red) >> $(postExp) |]
+               | level == "WARNING" ->  [|(liftIO $ putChunkLn $ (chunk :: T.Text -> Chunk T.Text) $(msgExp) & fore yellow) >> $(postExp) |]
+               | level == "INFO" ->     [|(liftIO $ putChunkLn $ (chunk :: T.Text -> Chunk T.Text) $(msgExp) & fore grey) >> $(postExp) |]
+               | otherwise -> postExp
 
-headlineQ :: QuasiQuoter
-headlineQ = mkLevelQ "HEADLINE"
+logHeadline :: QuasiQuoter
+logHeadline =  mkLevel "HEADLINE"
 
-headline :: Q Exp
-headline = mkLevel "HEADLINE"
+logError :: QuasiQuoter
+logError = mkLevel "ERROR"
 
-error :: Q Exp
-error = mkLevel "ERROR"
+logWarning :: QuasiQuoter
+logWarning = mkLevel "WARNING"
 
-warning :: Q Exp
-warning = mkLevel "WARNING"
+logInfo :: QuasiQuoter
+logInfo = mkLevel "INFO"
 
-info :: Q Exp
-info = mkLevel "INFO"
-
-trace :: Q Exp
-trace = mkLevel "TRACE"
+logTrace :: QuasiQuoter
+logTrace = mkLevel "TRACE"
