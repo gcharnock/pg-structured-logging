@@ -16,6 +16,7 @@ import Data.Aeson
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
+import Control.Monad.IO.Class
 import Text.InterpolatedString.Perl6
 
 mkLevel :: T.Text -> Q Exp
@@ -24,7 +25,7 @@ mkLevel level = do
    let filename = loc_filename loc
        (line, col) = loc_start loc
    [|\logger msg ->
-      postRawLog logger LogMsg 
+      liftIO $ postRawLog logger LogMsg 
          { logMsgLevel= $(lift $ T.unpack level)
          , logMsgBody=msg
          , logMsgData=Nothing 
@@ -41,8 +42,7 @@ mkLevelQ level = QuasiQuoter { quoteExp = quoter }
             loc <- location
             let filename = loc_filename loc
                 (line, col) = loc_start loc
-            [|\logger ->
-               postRawLog logger LogMsg 
+            [|postRawLogM LogMsg 
                   { logMsgLevel= $(lift $ T.unpack level)
                   , logMsgBody= $(msgExp)
                   , logMsgData=Nothing 

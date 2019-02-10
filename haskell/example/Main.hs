@@ -7,12 +7,15 @@ import Data.Time.Clock
 import Logging.Contextual
 import Logging.Contextual.BasicScheme
 import NeatInterpolation
+import Control.Monad.Trans.Reader(runReaderT, ReaderT, ask)
 
-producer :: Logger -> Int -> IO NominalDiffTime
-producer logger msgCount = do
+producer :: Int -> ReaderT Logger IO NominalDiffTime
+producer msgCount = do
+  logger <- ask
   now <- liftIO $ getCurrentTime
-  withEvent logger (LogEvent "example event" Nothing) $ \logger ->
-    replicateM_ msgCount $ $trace logger "example message"
+  withEventM (LogEvent "example event" Nothing) $ do
+    logger' <- ask
+    replicateM_ msgCount $ $trace logger' "example message"
   end <- liftIO $ getCurrentTime
   return $ end `diffUTCTime` now
 
@@ -20,28 +23,31 @@ runTest :: Int -> IO ()
 runTest size = do
   let logSettings = LoggerSettings 
          { lsWriterCount = size
-         , lsHostname = "docker"
-         , lsPort = 30000
+         , lsHostname = "localhost"
+         , lsPort = 5432
          , lsUsername = "postgres"
-         , lsPassword = "dev"
-         , lsDbName = "postgres"
+         , lsPassword = ""
+         , lsDbName = "log"
          }
 
   logger <- makeLogger logSettings (LogEvent "app startup" Nothing)
-  let t = "world" :: T.Text
-  let s = [text|hello ${t}|]
-  $headline logger s
-  [headlineQ|logger created. Hostname = {t <> "foobar"}|] logger
-  now <- liftIO getCurrentTime
-  producerTime <- producer logger (size * 10000)
-  print $ fromIntegral size * (10000.0 :: Double) / realToFrac producerTime 
+  flip runReaderT logger $ do
+    let t = "world" :: T.Text
+    let s = [text|hello ${t}|]
+    $headline logger s
+    [headlineQ|logger created. Hostname = {t <> "foobar"}|] 
+    now <- liftIO getCurrentTime
+    
+    producerTime <- producer (size * 10000)
 
- 
+    let bustRate = fromIntegral size * (10000.0 :: Double) / realToFrac producerTime
+    [headlineQ|burst rate={bustRate} lines/sec|]
+
+    consumerTime <- liftIO $ getCurrentTime
+    let dbRate = fromIntegral size * (10000.0 :: Double) / realToFrac (consumerTime `diffUTCTime` now) 
+    [headlineQ|db rate={dbRate} lines/sec|]
+
   closeLogger logger
-  consumerTime <- getCurrentTime
-  print $ fromIntegral size * (10000.0 :: Double) / realToFrac (consumerTime `diffUTCTime` now) 
-
-  putStrLn ""
 
 main :: IO ()
 main = do

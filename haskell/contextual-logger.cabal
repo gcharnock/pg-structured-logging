@@ -55,6 +55,7 @@ executable example
                        QuasiQuotes
   build-depends:       base >=4.10 && <4.12,
                        contextual-logger,
+                       transformers,
                        text,
                        bytestring,
                        hasql,

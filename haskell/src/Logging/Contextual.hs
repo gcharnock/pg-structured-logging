@@ -7,7 +7,10 @@ module Logging.Contextual(
     withEvent,
     postRawLog,
     closeLogger,
-    withLogger
+    withLogger,
+    HasLog,
+    postRawLogM,
+    withEventM
 ) where
 
 import Control.Exception
@@ -31,6 +34,8 @@ import           Data.Aeson
 import           Data.UUID
 import           Data.UUID.V4
 import           Data.Word
+import Control.Monad.Reader.Class
+import Control.Monad.IO.Unlift
 
 data StartEvent = StartEvent 
     { seEventId :: UUID
@@ -186,3 +191,21 @@ postRawLog Logger {lgChan, lgEventId} logMsg@LogMsg {logMsgLevel, logMsgBody, lo
        , msgTimestamp = now
        , msgEventId = Just lgEventId
        } 
+
+class HasLog a where
+   getLog :: a -> Logger
+   setLog :: Logger -> a -> a
+instance HasLog Logger where
+   getLog = id
+   setLog = const
+
+postRawLogM :: (MonadReader env m, MonadIO m, HasLog env) => LogMsg -> m ()
+postRawLogM msg = do
+    logger <- getLog <$> ask
+    liftIO $ postRawLog logger msg
+
+withEventM :: (MonadUnliftIO m, MonadReader env m, MonadIO m, HasLog env) => LogEvent -> m a -> m a
+withEventM logEvent action = do
+    logger <- getLog <$> ask
+    runInIO <- askRunInIO
+    liftIO $ withEvent logger logEvent $ \logger' -> runInIO $ local (setLog logger') action

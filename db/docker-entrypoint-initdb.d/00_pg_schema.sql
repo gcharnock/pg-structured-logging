@@ -10,6 +10,7 @@ CREATE UNLOGGED TABLE public.event
     event_type text COLLATE pg_catalog."default",
     data jsonb,
     error jsonb,
+    result jsonb,
     CONSTRAINT event_pkey PRIMARY KEY (event_id)
 )
 WITH (
