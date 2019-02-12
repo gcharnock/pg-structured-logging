@@ -1,10 +1,9 @@
 module Main where
 
-import qualified Data.Text as T
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time.Clock
-import Control.Monad.Trans.Reader(runReaderT, ReaderT, ask)
+import Control.Monad.Trans.Reader(runReaderT, ReaderT)
 
 
 import Logging.Contextual
@@ -12,10 +11,8 @@ import Logging.Contextual.BasicScheme
 
 producer :: Int -> ReaderT Logger IO NominalDiffTime
 producer msgCount = do
-  logger <- ask
   now <- liftIO $ getCurrentTime
   withEventM (LogEvent "example event" Nothing) $ do
-    logger' <- ask
     replicateM_ msgCount $ [logTrace|example message|]
   end <- liftIO $ getCurrentTime
   return $ end `diffUTCTime` now
@@ -48,10 +45,10 @@ runTest size = do
     let bustRate = fromIntegral size * (10000.0 :: Double) / realToFrac producerTime
     [logHeadline|burst rate={bustRate} lines/sec|]
 
-    closeLogger logger
+    liftIO $ closeLogger logger
     consumerTime <- liftIO $ getCurrentTime
     let dbRate = fromIntegral size * (10000.0 :: Double) / realToFrac (consumerTime `diffUTCTime` now) 
-    liftIO $ putStrLn $ "db rate=" <> dbRate <> "lines/sec"
+    liftIO $ putStrLn $ "db rate=" <> show dbRate <> "lines/sec"
 
 
 main :: IO ()
