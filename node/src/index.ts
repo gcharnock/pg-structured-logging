@@ -120,6 +120,16 @@ export class Logger {
         }
     }
 
+    error(item: any, ...logItems: any[]) {
+        const message = util.format(item, ...logItems);
+        this.rawLog(message, "ERROR", undefined);
+    }
+
+    warning(item: any, ...logItems: any[]) {
+        const message = util.format(item, ...logItems);
+        this.rawLog(message, "WARN", undefined);
+    }
+
     info(item: any, ...logItems: any[]) {
         const message = util.format(item, ...logItems);
         this.rawLog(message, "INFO", undefined);
@@ -161,7 +171,7 @@ export class Logger {
                 tag: "RawEventEnd",
                 eventId: newEventId,
                 timestampEnd: new Date(),
-                error: e,
+                error: {message: e.message, stack: e.stack},
                 result: null
             };
 
