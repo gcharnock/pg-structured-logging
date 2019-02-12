@@ -161,9 +161,9 @@ export class Logger {
                 eventId: newEventId,
                 timestampEnd: new Date(),
                 error: null,
-                result: result.result
+                result: result.result === undefined || result.result === null ? null : result.result
             };
-            this.msgQueue.push(rawEventEnd);
+            this.pushRawLog(rawEventEnd);
             return result.returnValue;
         } catch (e) {
             this.setEventId(oldId);
@@ -175,7 +175,7 @@ export class Logger {
                 result: null
             };
 
-            this.msgQueue.push(rawEventEnd);
+            this.pushRawLog(rawEventEnd);
             throw e;
         }
     }
@@ -202,11 +202,17 @@ export class Logger {
             data
         };
 
-        this.msgQueue.push(rawMessage);
-        this.doInserts().catch(console.error);
+        this.pushRawLog(rawMessage);
     }
 
-    private async doInserts() {
+    private pushRawLog(msg: RawMessage | RawEventEnd | RawEventStart) {
+        this.msgQueue.push(msg);
+        if(this.msgQueue.length > 1000) {
+            this.flush().catch(console.error);
+        }
+    }
+
+    async flush() {
         const queue = this.msgQueue;
         this.msgQueue = [];
 

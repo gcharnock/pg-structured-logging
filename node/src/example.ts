@@ -34,17 +34,20 @@ const logger = new Logger({
             logger.error("crashed with error:", e);
         }
 
+
+        const count = 1000;
+        const start = new Date();
+        for(let i = 0; i < count; i++) {
+            logger.trace("benchmark");
+        }
+        const finish = new Date();
+        logger.info("put items on the queue at a rate of ", count * 1000/(finish.getTime() - start.getTime()), " per sec");
+
+        logger.info("app finished");
+
         return {returnValue: undefined}
     });
+    await logger.flush();
 
 
-    const count = 1000;
-    const start = new Date();
-    for(let i = 0; i < count; i++) {
-        logger.trace("benchmark");
-    }
-    const finish = new Date();
-    logger.info("put items on the queue at a rate of ", count * 1000/(finish.getTime() - start.getTime()), " per sec");
-
-    logger.info("app finished");
 })();
