@@ -36,7 +36,7 @@ export type RawEventStart = {
     tag: "RawEventStart",
     eventId: EventId,
     timestampStart: Date,
-    parent: EventId,
+    parent: EventId | undefined,
     eventType: string,
     data: any
 }
@@ -125,15 +125,47 @@ export class Logger {
         this.rawLog(message, "INFO", undefined);
     }
 
+    trace(item: any, ...logItems: any[]) {
+        const message = util.format(item, ...logItems);
+        this.rawLog(message, "TRACE", undefined);
+    }
+
     withEvent<T>(eventType: string, wrapped: () => {returnValue: T, result?: any}): T {
         const oldId = this.getEventId();
-        this.newEventId();
+        const newEventId = this.newEventId();
         try {
+            const rawEventStart: RawEventStart = {
+                tag: "RawEventStart",
+                eventId: newEventId,
+                parent: oldId,
+                timestampStart: new Date(),
+                eventType,
+                data: null
+            };
+            this.msgQueue.push(rawEventStart);
+
             const result = wrapped();
             this.setEventId(oldId);
+            const rawEventEnd: RawEventEnd = {
+                tag: "RawEventEnd",
+                eventId: newEventId,
+                timestampEnd: new Date(),
+                error: null,
+                result: result.result
+            };
+            this.msgQueue.push(rawEventEnd);
             return result.returnValue;
         } catch (e) {
             this.setEventId(oldId);
+            const rawEventEnd: RawEventEnd = {
+                tag: "RawEventEnd",
+                eventId: newEventId,
+                timestampEnd: new Date(),
+                error: e,
+                result: null
+            };
+
+            this.msgQueue.push(rawEventEnd);
             throw e;
         }
     }
@@ -171,6 +203,10 @@ export class Logger {
         for(const msg of queue) {
             if(msg.tag === "RawMessage") {
                 await this.insertMessage(msg);
+            } else if(msg.tag === "RawEventStart") {
+                await this.insertEvent(msg);
+            } else if(msg.tag === "RawEventEnd") {
+                await this.endEvent(msg);
             } else {
                 throw new Error("Not implemented");
             }

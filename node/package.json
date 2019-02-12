@@ -4,6 +4,7 @@
   "description": "log things with nested contexts.",
   "main": "src/index.ts",
   "scripts": {
+    "example": "ts-node src/example.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Gareth Charnock",
