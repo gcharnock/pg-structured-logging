@@ -15,6 +15,7 @@ const logger = new Logger({
 
 (async () => {
     await logger.init();
+    const count = 1000;
 
     logger.info("app start");
     logger.error("Error log");
@@ -22,7 +23,7 @@ const logger = new Logger({
     logger.info("info log");
     logger.trace("trace log");
 
-    logger.withEvent("App", () => {
+    const start = logger.withEvent("App", () => {
         logger.info("in app context");
 
 
@@ -35,7 +36,6 @@ const logger = new Logger({
         }
 
 
-        const count = 1000;
         const start = new Date();
         for(let i = 0; i < count; i++) {
             logger.trace("benchmark");
@@ -45,8 +45,11 @@ const logger = new Logger({
 
         logger.info("app finished");
 
-        return {returnValue: undefined}
+        return {returnValue: start}
     });
+    await logger.flush();
+    const finish = new Date();
+    logger.info("flushed all items to the database. Rate: ", (count + 2) * 1000/(finish.getTime() - start.getTime()), " per sec");
     await logger.flush();
 
 
