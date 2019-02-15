@@ -209,7 +209,7 @@ export class Logger {
 
     private pushRawLog(msg: RawMessage | RawEventEnd | RawEventStart) {
         this.msgQueue.push(msg);
-        if(this.msgQueue.length > 1000) {
+        if(this.msgQueue.length > this.maxQueueLength) {
             this.flush().catch(console.error);
         }
     }

@@ -48,9 +48,10 @@ const logger = new Logger({
         return {returnValue: null}
     });
     const startFlush = new Date();
+    const queueLen = (logger as any).msgQueue.length;
     await logger.flush();
     const finish = new Date();
-    logger.info("flushed all items to the database. Rate: ", (count + 2) * 1000/(finish.getTime() - startFlush.getTime()), " per sec");
+    logger.info("flushed all items to the database. Rate: ", queueLen * 1000/(finish.getTime() - startFlush.getTime()), " per sec");
     await logger.flush();
 
 
