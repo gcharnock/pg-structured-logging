@@ -4,6 +4,8 @@ import * as util from "util";
 import {Pool} from "pg";
 import {wrapCallSite} from "source-map-support";
 
+const pgFormat = require("pg-format");
+
 const asyncHooks = require('async_hooks');
 type EventId = string & { __brand: EventId };
 
@@ -220,12 +222,12 @@ export class Logger {
         const queue = this.msgQueue;
         this.msgQueue = [];
 
-        await this.greenThreadFlush(queue);
+        await this.batchQueryFlush(queue);
     }
 
 
     private async greenThreadFlush(queue: AnyMessage[]) {
-        await Promise.all(Array.from(Array(15)).map(async () => {
+        await Promise.all(Array.from(Array(10)).map(async () => {
             let msg: AnyMessage | undefined;
             while(msg = queue.shift()) {
                 if(msg.tag === "RawMessage") {
@@ -262,17 +264,19 @@ export class Logger {
 
         for(const msg of queue) {
             if(msg.tag === "RawMessage") {
-                await messages.push(msg);
+                messages.push(msg);
             } else if(msg.tag === "RawEventStart") {
-                await eventStart.push(msg);
+                eventStart.push(msg);
             } else if(msg.tag === "RawEventEnd") {
-                await eventEnd.push(msg);
+                eventEnd.push(msg);
             } else {
                 throw new Error("Not implemented");
             }
         }
 
-        //TODO
+        await this.batchInsertMessage(messages);
+        await this.thunderingHeardFlush(eventStart);
+        await this.thunderingHeardFlush(eventEnd);
     }
 
     private async naiveFlush(queue: AnyMessage[]) {
@@ -303,6 +307,21 @@ export class Logger {
         ]);
     }
 
+    private async batchInsertMessage(msgs: RawMessage[]) {
+        const toInsert = msgs.map(msg =>[
+            msg.message,
+                msg.level,
+                msg.eventId,
+                msg.timestamp,
+                msg.data,
+                msg.filename,
+                msg.line,
+                msg.col
+        ]);
+        const sql = "INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col) VALUES %L";
+        await this.pgPool.query(pgFormat(sql, toInsert));
+    }
+
     private async endEvent(eventEnd: RawEventEnd) {
         const query = "UPDATE event SET timestamp_end=$1, error=$2, result=$3 WHERE event_id=$4";
         await this.pgPool.query(query, [
@@ -313,6 +332,7 @@ export class Logger {
         ])
     }
 
+
     private async insertEvent(event: RawEventStart) {
         const query = "INSERT INTO event(event_id, timestamp_start, parent, event_type, data) VALUES($1, $2, $3, $4, $5)";
         await this.pgPool.query(query, [
@@ -322,6 +342,18 @@ export class Logger {
             event.eventType,
             event.data
         ])
+    }
+
+    private async batchInsertEvent(events: RawEventStart[]) {
+        const toInsert = events.map(event => [
+            event.eventId,
+            event.timestampStart,
+            event.parent,
+            event.eventType,
+            event.data
+        ]);
+        const sql = "INSERT INTO event(event_id, timestamp_start, parent, event_type, data) VALUES %L";
+        await this.pgPool.query(pgFormat(sql, toInsert));
     }
 
     private initAsync(asyncId: number, type: string, triggerAsyncId: number) {
