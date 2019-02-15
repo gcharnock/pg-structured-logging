@@ -65,9 +65,11 @@ export class Logger {
     private pgConfig: PostgresConfig;
     private pgPool: Pool = undefined as unknown as Pool;
     private msgQueue: (RawMessage | RawEventStart | RawEventEnd)[] = [];
+    private readonly maxQueueLength: number;
 
-    constructor(pgConfig: PostgresConfig) {
+    constructor(pgConfig: PostgresConfig, maxQueueLength: number) {
         this.pgConfig = pgConfig;
+        this.maxQueueLength = maxQueueLength;
         this.asyncHook = asyncHooks.createHook({
             init: this.initAsync.bind(this),
             after: this.afterAsync.bind(this)

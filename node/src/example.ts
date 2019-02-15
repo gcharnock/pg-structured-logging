@@ -11,7 +11,7 @@ const logger = new Logger({
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
     connectionName: "example-logger"
-});
+}, 10000);
 
 (async () => {
     await logger.init();
@@ -23,7 +23,7 @@ const logger = new Logger({
     logger.info("info log");
     logger.trace("trace log");
 
-    const start = logger.withEvent("App", () => {
+    logger.withEvent("App", () => {
         logger.info("in app context");
 
 
@@ -45,11 +45,12 @@ const logger = new Logger({
 
         logger.info("app finished");
 
-        return {returnValue: start}
+        return {returnValue: null}
     });
+    const startFlush = new Date();
     await logger.flush();
     const finish = new Date();
-    logger.info("flushed all items to the database. Rate: ", (count + 2) * 1000/(finish.getTime() - start.getTime()), " per sec");
+    logger.info("flushed all items to the database. Rate: ", (count + 2) * 1000/(finish.getTime() - startFlush.getTime()), " per sec");
     await logger.flush();
 
 
