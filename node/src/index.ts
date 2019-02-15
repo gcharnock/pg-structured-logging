@@ -220,10 +220,28 @@ export class Logger {
         const queue = this.msgQueue;
         this.msgQueue = [];
 
-        await this.promiseAllFlush(queue);
+        await this.greenThreadFlush(queue);
     }
 
-    private async promiseAllFlush(queue: AnyMessage[]) {
+
+    private async greenThreadFlush(queue: AnyMessage[]) {
+        await Promise.all([1,2,3,4,5,6,7,8,9,10].map(async () => {
+            let msg: AnyMessage | undefined;
+            while(msg = queue.shift()) {
+                if(msg.tag === "RawMessage") {
+                    await this.insertMessage(msg);
+                } else if(msg.tag === "RawEventStart") {
+                    await this.insertEvent(msg);
+                } else if(msg.tag === "RawEventEnd") {
+                    await this.endEvent(msg);
+                } else {
+                    throw new Error("Not implemented");
+                }
+            }
+        }));
+    }
+
+    private async thunderingHeardFlush(queue: AnyMessage[]) {
         await Promise.all(queue.map(async msg => {
             if(msg.tag === "RawMessage") {
                 await this.insertMessage(msg);
