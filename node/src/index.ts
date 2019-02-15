@@ -49,6 +49,8 @@ export type RawEventEnd = {
     result: any
 }
 
+type AnyMessage = RawMessage | RawEventStart | RawEventEnd;
+
 //============================================================
 
 function sleep(deplay: number): Promise<void> {
@@ -62,9 +64,9 @@ function sleep(deplay: number): Promise<void> {
 export class Logger {
     private contexts = new Map<number, EventId>();
     private asyncHook: AsyncHook;
-    private pgConfig: PostgresConfig;
+    private readonly pgConfig: PostgresConfig;
     private pgPool: Pool = undefined as unknown as Pool;
-    private msgQueue: (RawMessage | RawEventStart | RawEventEnd)[] = [];
+    private msgQueue: AnyMessage[] = [];
     private readonly maxQueueLength: number;
 
     constructor(pgConfig: PostgresConfig, maxQueueLength: number) {
@@ -218,6 +220,44 @@ export class Logger {
         const queue = this.msgQueue;
         this.msgQueue = [];
 
+        await this.promiseAllFlush(queue);
+    }
+
+    private async promiseAllFlush(queue: AnyMessage[]) {
+        await Promise.all(queue.map(async msg => {
+            if(msg.tag === "RawMessage") {
+                await this.insertMessage(msg);
+            } else if(msg.tag === "RawEventStart") {
+                await this.insertEvent(msg);
+            } else if(msg.tag === "RawEventEnd") {
+                await this.endEvent(msg);
+            } else {
+                throw new Error("Not implemented");
+            }
+        }));
+    }
+
+    private async batchQueryFlush(queue: AnyMessage[]) {
+        const messages: RawMessage[] = [];
+        const eventStart: RawEventStart[] = [];
+        const eventEnd: RawEventEnd[] = [];
+
+        for(const msg of queue) {
+            if(msg.tag === "RawMessage") {
+                await messages.push(msg);
+            } else if(msg.tag === "RawEventStart") {
+                await eventStart.push(msg);
+            } else if(msg.tag === "RawEventEnd") {
+                await eventEnd.push(msg);
+            } else {
+                throw new Error("Not implemented");
+            }
+        }
+
+        //TODO
+    }
+
+    private async naiveFlush(queue: AnyMessage[]) {
         for(const msg of queue) {
             if(msg.tag === "RawMessage") {
                 await this.insertMessage(msg);
