@@ -225,7 +225,6 @@ export class Logger {
         await this.batchQueryFlush(queue);
     }
 
-
     private async greenThreadFlush(queue: AnyMessage[]) {
         await Promise.all(Array.from(Array(10)).map(async () => {
             let msg: AnyMessage | undefined;
@@ -320,6 +319,21 @@ export class Logger {
         ]);
         const sql = "INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col) VALUES %L";
         await this.pgPool.query(pgFormat(sql, toInsert));
+    }
+
+    private async unnestInsertMessage(msgs: RawMessage[]) {
+        const sql = `INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col)
+                        select * from unnest($1::text[], $2::text[], $3::uuid[], $4::timestamp with time zone[], $5::jsonb[], $6::text[], $7::integer[], $8::integer[])`;
+        await this.pgPool.query(sql, [
+            msgs.map(msg => msg.message),
+            msgs.map(msg => msg.level),
+            msgs.map(msg => msg.eventId),
+            msgs.map(msg => msg.timestamp),
+            msgs.map(msg => msg.data),
+            msgs.map(msg => msg.filename),
+            msgs.map(msg => msg.line),
+            msgs.map(msg => msg.col)
+        ]);
     }
 
     private async endEvent(eventEnd: RawEventEnd) {
