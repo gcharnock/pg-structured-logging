@@ -225,7 +225,7 @@ export class Logger {
 
 
     private async greenThreadFlush(queue: AnyMessage[]) {
-        await Promise.all([1,2,3,4,5,6,7,8,9,10].map(async () => {
+        await Promise.all(Array.from(Array(15)).map(async () => {
             let msg: AnyMessage | undefined;
             while(msg = queue.shift()) {
                 if(msg.tag === "RawMessage") {
