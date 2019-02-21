@@ -25,7 +25,6 @@ library
                        bytestring,
                        transformers,
                        mtl,
-                       unliftio,
                        unliftio-core,
                        rainbow,
                        monad-logger,

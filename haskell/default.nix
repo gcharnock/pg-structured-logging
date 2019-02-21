@@ -1,35 +1,22 @@
-
-let
-  doJailbreak = pkgs.haskell.lib.doJailbreak;
-  dontCheck = pkgs.haskell.lib.dontCheck;
-  config = {
-    allowUnfree = true;
-    packageOverrides = pkgs: rec {
-      haskell = pkgs.haskell // {
-        packages = pkgs.haskell.packages // {
-          ghc863 = pkgs.haskell.packages.ghc863.override {
-            overrides = self: super: {
-              entropy = self.callPackage ./nix/entropy.nix { };
-              hspec-core = doJailbreak (self.callPackage ./nix/hspec-core.nix { });
-              hspec = super.callPackage ./nix/hspec.nix { };
-              unliftio-core = doJailbreak (self.callPackage ./nix/unliftio-core.nix { });
-              contextual-logger = self.callPackage ./contextual-logger.nix {};
-              contravariant = doJailbreak (self.callPackage ./nix/contravariant.nix {});
-              lens-family-core = doJailbreak super.lens-family-core;
-              doctest = doJailbreak super.doctest;
-            };
-          };
-          ghc844 = pkgs.haskell.packages.ghc844.override {
-            overrides = self: super: {
-              contextual-logger = self.callPackage ./contextual-logger.nix {};
-            };
-          };
-        };
-      };
-    };
-  };
-
-  pkgs = import <nixpkgs> { inherit config; };
-in
-# pkgs.haskell.packages.ghc863.contextual-logger
-pkgs.haskell.packages.ghc844.contextual-logger
+{ mkDerivation, aeson, async, base, bytestring, contravariant
+, hasql, hasql-pool, interpolatedstring-perl6, monad-logger, mtl
+, rainbow, stdenv, template-haskell, text, time, transformers
+, unliftio-core, uuid
+}:
+mkDerivation {
+  pname = "contextual-logger";
+  version = "0.1.0.0";
+  src = ./.;
+  isLibrary = true;
+  isExecutable = true;
+  libraryHaskellDepends = [
+    aeson async base bytestring contravariant hasql hasql-pool
+    interpolatedstring-perl6 monad-logger mtl rainbow template-haskell
+    text time transformers unliftio-core uuid
+  ];
+  executableHaskellDepends = [
+    aeson async base bytestring text time transformers
+  ];
+  license = stdenv.lib.licenses.unfree;
+  hydraPlatforms = stdenv.lib.platforms.none;
+}

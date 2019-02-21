@@ -1,21 +1,24 @@
 module Main where
 
-import qualified Data.Text as T
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Time.Clock
-import Control.Monad.Trans.Reader(runReaderT, ReaderT, ask)
+import Control.Monad.Trans.Reader(runReaderT, ReaderT)
 
 
 import Logging.Contextual
 import Logging.Contextual.BasicScheme 
 
+data Context = Context { cntxLogger :: Logger }
+
+instance HasLog Context where
+  getLog = cntxLogger
+  setLog logger context = context { cntxLogger = logger }
+
 producer :: Int -> ReaderT Logger IO NominalDiffTime
 producer msgCount = do
-  logger <- ask
   now <- liftIO $ getCurrentTime
   withEventM (LogEvent "example event" Nothing) $ do
-    logger' <- ask
     replicateM_ msgCount $ [logTrace|example message|]
   end <- liftIO $ getCurrentTime
   return $ end `diffUTCTime` now
