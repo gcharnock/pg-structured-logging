@@ -1,2 +1,2 @@
 { }:
-(import ./default.nix).env
+(import ./contextual-logger.nix).env

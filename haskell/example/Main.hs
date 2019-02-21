@@ -9,6 +9,12 @@ import Control.Monad.Trans.Reader(runReaderT, ReaderT)
 import Logging.Contextual
 import Logging.Contextual.BasicScheme 
 
+data Context = Context { cntxLogger :: Logger }
+
+instance HasLog Context where
+  getLog = cntxLogger
+  setLog logger context = context { cntxLogger = logger }
+
 producer :: Int -> ReaderT Logger IO NominalDiffTime
 producer msgCount = do
   now <- liftIO $ getCurrentTime
