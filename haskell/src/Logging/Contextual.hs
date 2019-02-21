@@ -8,7 +8,7 @@ module Logging.Contextual(
     postRawLog,
     closeLogger,
     withLogger,
-    HasLog,
+    HasLog(getLog, setLog),
     postRawLogM,
     withEventM
 ) where

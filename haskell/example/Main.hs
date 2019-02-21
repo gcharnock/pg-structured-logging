@@ -48,10 +48,10 @@ runTest size = do
     let bustRate = fromIntegral size * (10000.0 :: Double) / realToFrac producerTime
     [logHeadline|burst rate={bustRate} lines/sec|]
 
-    closeLogger logger
+    liftIO $ closeLogger logger
     consumerTime <- liftIO $ getCurrentTime
     let dbRate = fromIntegral size * (10000.0 :: Double) / realToFrac (consumerTime `diffUTCTime` now) 
-    liftIO $ putStrLn $ "db rate=" <> dbRate <> "lines/sec"
+    liftIO $ putStrLn $ "db rate=" <> show dbRate <> "lines/sec"
 
 
 main :: IO ()
