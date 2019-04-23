@@ -19,7 +19,11 @@ export type PostgresConfig = {
     poolSize: number,
     idleTimeoutMillis: number,
     connectionTimeoutMillis: number,
-    connectionName: string
+    connectionName: string,
+
+    defaultSchema?: string,
+    messageTableName?: string,
+    eventTableName?: string
 };
 
 export type RawMessage = {
@@ -71,8 +75,32 @@ export class Logger {
     private msgQueue: AnyMessage[] = [];
     private readonly maxQueueLength: number;
 
+    private readonly eventTableName: string;
+    private readonly messageTableName: string;
+
+    private readonly insertMessageSql: string;
+    private readonly batchInsertMessageSql: string;
+    private readonly unnestInsertMessageSql: string;
+
+    private readonly insertEventSql: string;
+    private readonly batchInsertEventSql: string;
+    private readonly finializeEventSql: string;
+
     constructor(pgConfig: PostgresConfig, maxQueueLength: number) {
         this.pgConfig = pgConfig;
+
+        this.eventTableName = pgConfig.eventTableName ? pgConfig.eventTableName : "event";
+        this.messageTableName = pgConfig.messageTableName ? pgConfig.messageTableName : "message";
+
+        this.insertMessageSql = `INSERT INTO ${pgFormat('%I', this.messageTableName)}(message, level, event_id, timestamp, data, filename, line, col) VALUES($1, $2, $3, $4, $5, $6, $7, $8)`;
+        this.batchInsertMessageSql = `INSERT INTO ${pgFormat('%I', this.messageTableName)}(message, level, event_id, timestamp, data, filename, line, col) VALUES %L`;
+        this.unnestInsertMessageSql = `INSERT INTO  ${pgFormat('%I', this.messageTableName)}(message, level, event_id, timestamp, data, filename, line, col)
+                 select * from unnest($1::text[], $2::text[], $3::uuid[], $4::timestamp with time zone[], $5::jsonb[], $6::text[], $7::integer[], $8::integer[])`;
+
+        this.insertEventSql = `INSERT INTO ${pgFormat('%I', this.eventTableName)}(event_id, timestamp_start, parent, event_type, data) VALUES($1, $2, $3, $4, $5)`;
+        this.batchInsertEventSql = `INSERT INTO  ${pgFormat('%I', this.eventTableName)}(event_id, timestamp_start, parent, event_type, data) VALUES %L`;
+        this.finializeEventSql = `UPDATE  ${pgFormat('%I', this.eventTableName)} SET timestamp_end=$1, error=$2, result=$3 WHERE event_id=$4`;
+
         this.maxQueueLength = maxQueueLength;
         this.asyncHook = asyncHooks.createHook({
             init: this.initAsync.bind(this),
@@ -93,6 +121,9 @@ export class Logger {
                     idleTimeoutMillis: this.pgConfig.idleTimeoutMillis,
                     connectionTimeoutMillis: this.pgConfig.connectionTimeoutMillis
                 });
+                if (this.pgConfig.defaultSchema) {
+                    await this.pgPool.query(pgFormat('SET SCHEMA %s', this.pgConfig.defaultSchema))
+                }
                 return;
             } catch (e) {
                 if (i < 10) {
@@ -119,7 +150,7 @@ export class Logger {
 
     private setEventId(eventId: EventId | undefined) {
         const eid = asyncHooks.executionAsyncId();
-        if(eventId) {
+        if (eventId) {
             return this.contexts.set(eid, eventId);
         } else {
             this.contexts.delete(eid);
@@ -146,7 +177,7 @@ export class Logger {
         this.rawLog(message, "TRACE", undefined);
     }
 
-    withEvent<T>(eventType: string, wrapped: () => {returnValue: T, result?: any}): T {
+    withEvent<T>(eventType: string, wrapped: () => { returnValue: T, result?: any }): T {
         const oldId = this.getEventId();
         const newEventId = this.newEventId();
         try {
@@ -213,7 +244,7 @@ export class Logger {
 
     private pushRawLog(msg: RawMessage | RawEventEnd | RawEventStart) {
         this.msgQueue.push(msg);
-        if(this.msgQueue.length > this.maxQueueLength) {
+        if (this.msgQueue.length > this.maxQueueLength) {
             this.flush().catch(console.error);
         }
     }
@@ -228,12 +259,12 @@ export class Logger {
     private async greenThreadFlush(queue: AnyMessage[]) {
         await Promise.all(Array.from(Array(10)).map(async () => {
             let msg: AnyMessage | undefined;
-            while(msg = queue.shift()) {
-                if(msg.tag === "RawMessage") {
+            while (msg = queue.shift()) {
+                if (msg.tag === "RawMessage") {
                     await this.insertMessage(msg);
-                } else if(msg.tag === "RawEventStart") {
+                } else if (msg.tag === "RawEventStart") {
                     await this.insertEvent(msg);
-                } else if(msg.tag === "RawEventEnd") {
+                } else if (msg.tag === "RawEventEnd") {
                     await this.endEvent(msg);
                 } else {
                     throw new Error("Not implemented");
@@ -244,11 +275,11 @@ export class Logger {
 
     private async thunderingHeardFlush(queue: AnyMessage[]) {
         await Promise.all(queue.map(async msg => {
-            if(msg.tag === "RawMessage") {
+            if (msg.tag === "RawMessage") {
                 await this.insertMessage(msg);
-            } else if(msg.tag === "RawEventStart") {
+            } else if (msg.tag === "RawEventStart") {
                 await this.insertEvent(msg);
-            } else if(msg.tag === "RawEventEnd") {
+            } else if (msg.tag === "RawEventEnd") {
                 await this.endEvent(msg);
             } else {
                 throw new Error("Not implemented");
@@ -261,12 +292,12 @@ export class Logger {
         const eventStart: RawEventStart[] = [];
         const eventEnd: RawEventEnd[] = [];
 
-        for(const msg of queue) {
-            if(msg.tag === "RawMessage") {
+        for (const msg of queue) {
+            if (msg.tag === "RawMessage") {
                 messages.push(msg);
-            } else if(msg.tag === "RawEventStart") {
+            } else if (msg.tag === "RawEventStart") {
                 eventStart.push(msg);
-            } else if(msg.tag === "RawEventEnd") {
+            } else if (msg.tag === "RawEventEnd") {
                 eventEnd.push(msg);
             } else {
                 throw new Error("Not implemented");
@@ -279,12 +310,12 @@ export class Logger {
     }
 
     private async naiveFlush(queue: AnyMessage[]) {
-        for(const msg of queue) {
-            if(msg.tag === "RawMessage") {
+        for (const msg of queue) {
+            if (msg.tag === "RawMessage") {
                 await this.insertMessage(msg);
-            } else if(msg.tag === "RawEventStart") {
+            } else if (msg.tag === "RawEventStart") {
                 await this.insertEvent(msg);
-            } else if(msg.tag === "RawEventEnd") {
+            } else if (msg.tag === "RawEventEnd") {
                 await this.endEvent(msg);
             } else {
                 throw new Error("Not implemented");
@@ -293,8 +324,7 @@ export class Logger {
     }
 
     private async insertMessage(msg: RawMessage) {
-        const query = "INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col) VALUES($1, $2, $3, $4, $5, $6, $7, $8)";
-        await this.pgPool.query(query, [
+        await this.pgPool.query(this.insertMessageSql, [
             msg.message,
             msg.level,
             msg.eventId,
@@ -307,24 +337,21 @@ export class Logger {
     }
 
     private async batchInsertMessage(msgs: RawMessage[]) {
-        const toInsert = msgs.map(msg =>[
+        const toInsert = msgs.map(msg => [
             msg.message,
-                msg.level,
-                msg.eventId,
-                msg.timestamp,
-                msg.data,
-                msg.filename,
-                msg.line,
-                msg.col
+            msg.level,
+            msg.eventId,
+            msg.timestamp,
+            msg.data,
+            msg.filename,
+            msg.line,
+            msg.col
         ]);
-        const sql = "INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col) VALUES %L";
-        await this.pgPool.query(pgFormat(sql, toInsert));
+        await this.pgPool.query(pgFormat(this.batchInsertMessage, toInsert));
     }
 
     private async unnestInsertMessage(msgs: RawMessage[]) {
-        const sql = `INSERT INTO message(message, level, event_id, timestamp, data, filename, line, col)
-                        select * from unnest($1::text[], $2::text[], $3::uuid[], $4::timestamp with time zone[], $5::jsonb[], $6::text[], $7::integer[], $8::integer[])`;
-        await this.pgPool.query(sql, [
+        await this.pgPool.query(this.unnestInsertMessageSql, [
             msgs.map(msg => msg.message),
             msgs.map(msg => msg.level),
             msgs.map(msg => msg.eventId),
@@ -337,8 +364,7 @@ export class Logger {
     }
 
     private async endEvent(eventEnd: RawEventEnd) {
-        const query = "UPDATE event SET timestamp_end=$1, error=$2, result=$3 WHERE event_id=$4";
-        await this.pgPool.query(query, [
+        await this.pgPool.query(this.finializeEventSql, [
             eventEnd.timestampEnd,
             eventEnd.error,
             eventEnd.result,
@@ -348,8 +374,7 @@ export class Logger {
 
 
     private async insertEvent(event: RawEventStart) {
-        const query = "INSERT INTO event(event_id, timestamp_start, parent, event_type, data) VALUES($1, $2, $3, $4, $5)";
-        await this.pgPool.query(query, [
+        await this.pgPool.query(this.insertEventSql, [
             event.eventId,
             event.timestampStart,
             event.parent,
@@ -366,8 +391,7 @@ export class Logger {
             event.eventType,
             event.data
         ]);
-        const sql = "INSERT INTO event(event_id, timestamp_start, parent, event_type, data) VALUES %L";
-        await this.pgPool.query(pgFormat(sql, toInsert));
+        await this.pgPool.query(pgFormat(this.batchInsertEventSql, toInsert));
     }
 
     private initAsync(asyncId: number, type: string, triggerAsyncId: number) {

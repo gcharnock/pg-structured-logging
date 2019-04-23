@@ -10,7 +10,9 @@ const logger = new Logger({
     poolSize: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    connectionName: "example-logger"
+    connectionName: "example-logger",
+
+    defaultSchema: "log"
 }, 10000);
 
 (async () => {
