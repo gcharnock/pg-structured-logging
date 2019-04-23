@@ -24,7 +24,7 @@ CREATE UNLOGGED TABLE public.message
     message text COLLATE pg_catalog."default" NOT NULL,
     level text COLLATE pg_catalog."default" NOT NULL,
     event_id UUID,
-    timestamp timestamp without time zone NOT NULL,
+    timestamp timestamp with time zone NOT NULL,
     filename text COLLATE pg_catalog."default",
     line integer,
     col integer,

@@ -1,8 +1,9 @@
 import {Logger} from "./index";
+import fs = require("fs");
 
 const logger = new Logger({
-    host: "docker",
-    port: 30000,
+    host: "database-host.docker",
+    port: 5432,
     username: "postgres",
     password: "dev",
     database: "postgres",
@@ -12,8 +13,14 @@ const logger = new Logger({
     connectionTimeoutMillis: 5000,
     connectionName: "example-logger",
 
-    defaultSchema: "log"
-}, 10000);
+    defaultSchema: "log",
+    messageTableName: "message_unlogged",
+    eventTableName: "event_unlogged"
+}, 10000, (e: Error) => {
+    fs.writeSync(2, "====== LOGGING ERROR =======");
+    fs.writeSync(2, ""+e);
+    fs.writeSync(2, "====== END LOGGING ERROR =======");
+});
 
 (async () => {
     for(let i = 0; i < 10; i++) {

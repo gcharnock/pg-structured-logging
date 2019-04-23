@@ -86,8 +86,11 @@ export class Logger {
     private readonly batchInsertEventSql: string;
     private readonly finializeEventSql: string;
 
-    constructor(pgConfig: PostgresConfig, maxQueueLength: number) {
+    private readonly onError: (e: Error) => void;
+
+    constructor(pgConfig: PostgresConfig, maxQueueLength: number, onError: (e: Error) => void) {
         this.pgConfig = pgConfig;
+        this.onError = onError;
 
         this.eventTableName = pgConfig.eventTableName ? pgConfig.eventTableName : "event";
         this.messageTableName = pgConfig.messageTableName ? pgConfig.messageTableName : "message";
@@ -121,18 +124,21 @@ export class Logger {
                     idleTimeoutMillis: this.pgConfig.idleTimeoutMillis,
                     connectionTimeoutMillis: this.pgConfig.connectionTimeoutMillis
                 });
-                if (this.pgConfig.defaultSchema) {
-                    await this.pgPool.query(pgFormat('SET SCHEMA %s', this.pgConfig.defaultSchema))
-                }
-                return;
+                break;
             } catch (e) {
                 if (i < 10) {
                     i++;
                     await sleep(2000);
                 } else {
-                    process.exit(1);
+                    throw e;
                 }
             }
+        }
+        if (this.pgConfig.defaultSchema) {
+            this.pgPool.on("connect", db => {
+                db.query(pgFormat('SET SCHEMA %L', this.pgConfig.defaultSchema)).catch((e: any) =>
+                    this.onError(e));
+            });
         }
     }
 
@@ -347,7 +353,7 @@ export class Logger {
             msg.line,
             msg.col
         ]);
-        await this.pgPool.query(pgFormat(this.batchInsertMessage, toInsert));
+        await this.pgPool.query(pgFormat(this.batchInsertMessageSql, toInsert));
     }
 
     private async unnestInsertMessage(msgs: RawMessage[]) {
@@ -404,7 +410,6 @@ export class Logger {
     private afterAsync(asyncId: number) {
         this.contexts.delete(asyncId);
     }
-
 }
 
 //============================================================
