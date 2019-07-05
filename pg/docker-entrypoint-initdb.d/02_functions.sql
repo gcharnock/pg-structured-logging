@@ -53,7 +53,7 @@ CREATE FUNCTION public.make_partition_for_event(t timestamp with time zone) RETU
 DECLARE
   lower_bound timestamp := date_trunc('day', t);
   upper_bound timestamp := date_trunc('day', t + interval '1 day');
-  table_name text := get_event_table_partition_name(t);
+  table_name text := public.get_event_table_partition_name(t);
 BEGIN
   execute format('create table %s PARTITION OF public.event FOR VALUES FROM (''%s'') TO (''%s'')', table_name, lower_bound, upper_bound);
   RETURN NULL;
@@ -67,7 +67,7 @@ CREATE FUNCTION public.make_partition_for_message(t timestamp with time zone) RE
 DECLARE
   lower_bound timestamp := date_trunc('day', t);
   upper_bound timestamp := date_trunc('day', t + interval '1 day');
-  table_name text := get_message_table_partition_name(t);
+  table_name text := public.get_message_table_partition_name(t);
 BEGIN
   execute format('create table %s PARTITION OF public.message FOR VALUES FROM (''%s'') TO (''%s'') PARTITION BY RANGE (level)', table_name, lower_bound, upper_bound);
   execute format('create table %s PARTITION OF %s FOR VALUES FROM (-32768) TO (10)', table_name || '_trace', table_name);
@@ -82,11 +82,11 @@ $$;
 CREATE FUNCTION route_event()
   RETURNS TRIGGER AS $$
 DECLARE
-  tablename TEXT := get_event_table_partition_name(NEW.timestamp);
+  tablename TEXT := public.get_event_table_partition_name(NEW.timestamp_start);
 BEGIN
   IF NOT EXISTS (SELECT relname FROM pg_class WHERE relname=tablename)
   THEN
-    PERFORM make_partition_for_event(NEW.timestamp);
+    PERFORM public.make_partition_for_event(NEW.timestamp_start);
   END IF;
   INSERT INTO public.event (SELECT (NEW).*);
   RETURN null;
@@ -103,13 +103,13 @@ CREATE TRIGGER insert_to_event_trigger
 CREATE FUNCTION route_message()
   RETURNS TRIGGER AS $$
 DECLARE
-  tablename TEXT := get_message_table_partition_name(NEW.timestamp);
+  tablename TEXT := public.get_message_table_partition_name(NEW.timestamp);
 BEGIN
   IF NOT EXISTS (SELECT relname FROM pg_class WHERE relname=tablename)
   THEN
-    PERFORM make_partition_for_message(NEW.timestamp);
+    PERFORM public.make_partition_for_message(NEW.timestamp);
   END IF;
-  INSERT INTO message (SELECT (NEW).*);
+  INSERT INTO public.message (SELECT (NEW).*);
   RETURN null;
 END;
 $$ LANGUAGE plpgsql VOLATILE;
