@@ -55,7 +55,7 @@ DECLARE
   upper_bound timestamp := date_trunc('day', t + interval '1 day');
   table_name text := public.get_event_table_partition_name(t);
 BEGIN
-  execute format('create table %s PARTITION OF public.event FOR VALUES FROM (''%s'') TO (''%s'')', table_name, lower_bound, upper_bound);
+  execute format('create table public.%s PARTITION OF public.event FOR VALUES FROM (''%s'') TO (''%s'')', table_name, lower_bound, upper_bound);
   RETURN NULL;
 END;
 $$;
@@ -69,10 +69,10 @@ DECLARE
   upper_bound timestamp := date_trunc('day', t + interval '1 day');
   table_name text := public.get_message_table_partition_name(t);
 BEGIN
-  execute format('create table %s PARTITION OF public.message FOR VALUES FROM (''%s'') TO (''%s'') PARTITION BY RANGE (level)', table_name, lower_bound, upper_bound);
-  execute format('create table %s PARTITION OF %s FOR VALUES FROM (-32768) TO (10)', table_name || '_trace', table_name);
-  execute format('create table %s PARTITION OF %s FOR VALUES FROM (11) TO (20)', table_name || '_info', table_name);
-  execute format('create table %s PARTITION OF %s FOR VALUES FROM (20) TO (32767)', table_name || '_error', table_name);
+  execute format('create table public.%s PARTITION OF public.message FOR VALUES FROM (''%s'') TO (''%s'') PARTITION BY RANGE (level)', table_name, lower_bound, upper_bound);
+  execute format('create table public.%s PARTITION OF %s FOR VALUES FROM (-32768) TO (10)', table_name || '_trace', table_name);
+  execute format('create table public.%s PARTITION OF %s FOR VALUES FROM (11) TO (20)', table_name || '_info', table_name);
+  execute format('create table public.%s PARTITION OF %s FOR VALUES FROM (20) TO (32767)', table_name || '_error', table_name);
   RETURN NULL;
 END;
 $$;
